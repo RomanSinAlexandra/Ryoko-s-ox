@@ -4,22 +4,28 @@ import subprocess
 import webbrowser
 import json
 import sys
+import urllib.request
 
 from PyQt6.QtWidgets import QMainWindow, QApplication, QFileDialog
 from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QPixmap, QImage
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from src.ui_layout import Ui_MainWindow 
-from src.styles import get_main_stylesheet
+from src.styles.styles import get_main_stylesheet
 from src.workers.download_worker import DownloadWorker
 from src.workers.info_worker import InfoWorker
+
+def resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Ryoko Downloader")
-        self.setWindowIcon(QIcon("resource/image/favicon.ico"))
+        self.setWindowIcon(QIcon(resource_path("resource/image/favicon.ico")))
         self.resize(1100, 700)
 
         self.load_settings() 
@@ -47,19 +53,41 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.btn_back.clicked.connect(lambda: self.seek_relative(-5000))
         self.btn_play.clicked.connect(self.toggle_playback)
         self.btn_forward.clicked.connect(lambda: self.seek_relative(5000))
+
+        self.media_player.positionChanged.connect(self.update_timeline_position)
+        self.media_player.durationChanged.connect(self.update_timeline_duration)
         
-        self.media_player.positionChanged.connect(self.update_time_label)
-        self.media_player.durationChanged.connect(self.update_time_label)
-        
+        self.timeline_slider.sliderMoved.connect(self.set_video_position)
+        self.player_volume_slider.valueChanged.connect(self.update_volume)
         self.movie.finished.connect(self.movie.start)
+        
+        self.media_player.mediaStatusChanged.connect(self.on_media_status_changed)
+        self.btn_mute.clicked.connect(self.toggle_mute)
+
+    def update_volume(self, value):
+        self.audio_output.setVolume(value / 100)
+        
+        if self.audio_output.isMuted() and value > 0:
+            self.audio_output.setMuted(False)
+            self.btn_mute.setIcon(QIcon(resource_path("resource/ico/volume.svg")))
 
     def toggle_playback(self):
         if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.media_player.pause()
-            self.btn_play.setIcon(QIcon("resource/ico/play.svg"))
+            self.btn_play.setIcon(QIcon(resource_path("resource/ico/play.svg")))
         else:
+
+            self.preview_stack.setCurrentWidget(self.video_widget)
             self.media_player.play()
-            self.btn_play.setIcon(QIcon("resource/ico/pause.svg"))
+            self.btn_play.setIcon(QIcon(resource_path("resource/ico/pause.svg")))
+
+    def on_media_status_changed(self, status):
+
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            self.media_player.setPosition(0)
+            self.preview_stack.setCurrentWidget(self.thumbnail_label)
+
+            self.btn_play.setIcon(QIcon(resource_path("resource/ico/replay.svg")))
 
     def seek_relative(self, ms):
         new_pos = self.media_player.position() + ms
@@ -88,12 +116,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def setup_preview(self, data):
         self.desc_output.setText(f"{data['title']}\n\n{data['description']}")
+
+        if data.get('thumbnail'):
+            try:
+
+                req = urllib.request.Request(data['thumbnail'], headers={'User-Agent': 'Mozilla/5.0'})
+                image_data = urllib.request.urlopen(req).read()
+
+                image = QImage()
+                image.loadFromData(image_data)
+                pixmap = QPixmap.fromImage(image)
+
+                scaled_pixmap = pixmap.scaled(
+                    640, 480,
+                    Qt.AspectRatioMode.KeepAspectRatio, 
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.thumbnail_label.setPixmap(scaled_pixmap)
+            except Exception as e:
+                self.log_console(f"Error loading thumbnail: {e}")
+
+        self.preview_stack.setCurrentWidget(self.thumbnail_label)
         
         if data['stream_url']:
             self.media_player.setSource(QUrl(data['stream_url']))
             self.media_player.pause() 
-            self.btn_play.setIcon(QIcon("resource/ico/play.svg"))
-            self.log_console("Video stream loaded.")
+            self.btn_play.setIcon(QIcon(resource_path("resource/ico/play.svg")))
+            self.log_console("Video stream loaded. Press Play to start.")
         else:
             self.log_console("Could not resolve video stream URL.")
 
@@ -129,6 +178,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         url = self.url_input.text()
         path = self.path_input.text()
         fmt = self.type_combo.currentText()
+        quality = self.quality_combo.currentText()
 
         self.movie.start()
 
@@ -140,7 +190,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.lbl_dl_status.setText("🔴 Download status: Downloading")
         self.log_console("Initializing yt-dlp...")
 
-        self.worker = DownloadWorker(url, path, fmt)
+        self.worker = DownloadWorker(url, path, fmt, quality)
         self.worker.console_signal.connect(self.log_console)
         self.worker.progress_signal.connect(self.update_progress)
         self.worker.speed_signal.connect(self.update_speed)
@@ -149,6 +199,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def log_console(self, text):
         self.console_output.append(text)
+
+    def update_timeline_duration(self, duration):
+
+        self.timeline_slider.setRange(0, duration)
+        self.update_time_label() # Обновляем текст
+
+    def update_timeline_position(self, position):
+
+        if not self.timeline_slider.isSliderDown():
+            self.timeline_slider.setValue(position)
+        self.update_time_label()
+
+    def set_video_position(self, position):
+
+        self.media_player.setPosition(position)
+
+    def update_time_label(self):
+
+        pos = self.media_player.position()
+        dur = self.media_player.duration()
+        
+        def format_ms(ms):
+            s = (ms // 1000) % 60
+            m = (ms // (1000 * 60)) % 60
+            h = (ms // (1000 * 60 * 60))
+            if h > 0:
+                return f"{h:02d}:{m:02d}:{s:02d}"
+            return f"{m:02d}:{s:02d}"
+        
+        self.lbl_time.setText(f"{format_ms(pos)} / {format_ms(dur)}")
 
     def open_link_in_browser(self):
         url = self.url_input.text()
@@ -183,6 +263,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.lbl_perc_val.setText("0%")
         self.lbl_speed_val.setText("0 B/s")
         self.log_console("--- Process completed ---")
+
+    def toggle_mute(self):
+
+        is_muted = self.audio_output.isMuted()
+        new_mute_state = not is_muted
+
+        self.audio_output.setMuted(new_mute_state)
+        
+        if new_mute_state:
+
+            self.btn_mute.setIcon(QIcon(resource_path("resource/ico/mute.svg")))
+        else:
+
+            self.btn_mute.setIcon(QIcon(resource_path("resource/ico/volume.svg")))
+            current_vol = self.player_volume_slider.value()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
