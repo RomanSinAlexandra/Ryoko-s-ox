@@ -23,8 +23,7 @@ class DownloadWorker(QThread):
         self.quality = quality
 
     def run(self):
-
-        height = self.quality.replace("p", "")
+        height_val = self.quality.lower().replace("p", "").strip()
 
         ydl_opts = {
             'outtmpl': f'{self.download_path}/%(title)s.%(ext)s',
@@ -33,13 +32,21 @@ class DownloadWorker(QThread):
             'no_warnings': True,
             'noplaylist': True,
             'ffmpeg_location': resource_path('src/yt_dlp'),
-            'js_runtime': 'quickjs:' + resource_path('src/yt_dlp/quickjs.exe'),
+            
+            'js_runtimes': {
+                'deno': {
+                    'path': resource_path('src/yt_dlp/deno.exe')
+                }
+            },
+            
+            'remote_components': 'ejs:github',
+            
+            'cookiefile': resource_path(os.path.join('src', 'yt_dlp', 'cookies.txt')),
         }
 
         audio_formats = ['MP3', 'WAV', 'OGG', 'FLAC']
         
         if self.fmt in audio_formats:
-
             ydl_opts['format'] = 'bestaudio/best'
             postprocessor = {
                 'key': 'FFmpegExtractAudio',
@@ -50,23 +57,34 @@ class DownloadWorker(QThread):
             ydl_opts['postprocessors'] = [postprocessor]
             
         else:
-
-            if self.quality == "Worst":
-                format_str = f"worstvideo[ext={self.fmt.lower()}]+worstaudio/worst"
+            if height_val == "worst":
+                format_str = "worstvideo+worstaudio/worst"
+            elif not height_val.isdigit():
+                format_str = "bestvideo+bestaudio/best"
             else:
 
-                format_str = f"bestvideo[height<={height}][ext={self.fmt.lower()}]+bestaudio/best[height<={height}]"
+                format_str = (
+                    f"bestvideo[height<={height_val}]+bestaudio/"
+                    f"bestvideo+bestaudio/"
+                    f"best/"
+                    f"bestaudio"
+                )
             
             ydl_opts['format'] = format_str
+            
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': self.fmt.lower(),
+            }]
 
         try:
             self.console_signal.emit(f"Starting download: {self.url} as {self.fmt} ({self.quality})")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info_dict = ydl.extract_info(self.url, download=True)
                 title = info_dict.get('title', 'File')
-                self.console_signal.emit(f"Successfully downloaded: {title}")
+                self.console_signal.emit(f"✅ Successfully downloaded: {title}")
         except Exception as e:
-            self.console_signal.emit(f"Error: {str(e)}")
+            self.console_signal.emit(f"❌ Error: {str(e)}")
         
         self.finished_signal.emit()
 

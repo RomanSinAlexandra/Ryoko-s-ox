@@ -58,7 +58,8 @@ class Ui_MainWindow:
         type_left.addWidget(self.type_combo)
 
         quality_left = QVBoxLayout()
-        quality_left.addWidget(QLabel("Quality"))
+        self.quality_label = QLabel("Quality")
+        quality_left.addWidget(self.quality_label)
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["1080p", "720p", "480p", "360p", "Worst"])
         self.quality_combo.setFixedWidth(100)
@@ -73,10 +74,14 @@ class Ui_MainWindow:
         self.btn_download = QPushButton("Download")
         self.btn_download.setProperty("class", "btn-primary")
 
-        type_layout.addLayout(type_left)
-        type_layout.addStretch()
-        type_layout.addWidget(self.btn_download)
-        input_layout.addLayout(type_layout)
+        self.btn_download_preview = QPushButton("DL Preview")
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addWidget(self.btn_download)  
+        btn_layout.addWidget(self.btn_download_preview)
+        btn_layout.addStretch()        
+        
+        input_layout.addLayout(btn_layout)
         input_layout.addStretch()
 
         preview_frame = QFrame()

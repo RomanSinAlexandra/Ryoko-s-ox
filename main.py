@@ -64,6 +64,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.media_player.mediaStatusChanged.connect(self.on_media_status_changed)
         self.btn_mute.clicked.connect(self.toggle_mute)
 
+        self.type_combo.currentTextChanged.connect(self.on_format_type_changed)
+        self.btn_download_preview.clicked.connect(self.save_thumbnail)
+
+    def on_format_type_changed(self, text):
+        audio_formats = ["mp3", "m4a", "wav", "flac", "audio", "звук"] 
+        
+        if text.lower() in audio_formats:
+            self.quality_combo.hide()
+            self.quality_label.hide() 
+        else:
+            self.quality_combo.show()
+            self.quality_label.show()
+
     def update_volume(self, value):
         self.audio_output.setVolume(value / 100)
         
@@ -123,6 +136,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 req = urllib.request.Request(data['thumbnail'], headers={'User-Agent': 'Mozilla/5.0'})
                 image_data = urllib.request.urlopen(req).read()
 
+                image_data = urllib.request.urlopen(req).read()
+                self.current_thumbnail_data = image_data
+
                 image = QImage()
                 image.loadFromData(image_data)
                 pixmap = QPixmap.fromImage(image)
@@ -145,6 +161,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.log_console("Video stream loaded. Press Play to start.")
         else:
             self.log_console("Could not resolve video stream URL.")
+
+    def save_thumbnail(self):
+
+        if not hasattr(self, 'current_thumbnail_data') or not self.current_thumbnail_data:
+            self.log_console("Error: No thumbnail loaded. Please load a valid URL first.")
+            return
+
+        default_path = os.path.join(self.path_input.text(), "preview.jpg")
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Thumbnail", default_path, "JPEG Images (*.jpg);;All Files (*)"
+        )
+        
+        if file_path:
+            try:
+
+                with open(file_path, "wb") as f:
+                    f.write(self.current_thumbnail_data)
+                self.log_console(f"Thumbnail saved successfully to: {file_path}")
+            except Exception as e:
+                self.log_console(f"Error saving thumbnail: {e}")
 
     def browse_folder(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Download Directory")
@@ -284,3 +321,5 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
+
+    # C:/Users/Romero/AppData/Local/Programs/Python/Python313/python.exe -m yt_dlp --cookies-from-browser chrome --js-runtimes "deno:E:\work\Ryoko_tsukiko\Ryoko youtube\src\yt_dlp\deno.exe" --remote-components ejs:github --list-formats "https://youtu.be/_QqQGreRAN4"

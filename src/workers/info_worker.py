@@ -1,5 +1,12 @@
 import yt_dlp
+import os
+import sys
 from PyQt6.QtCore import QThread, pyqtSignal
+
+def resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 
 class InfoWorker(QThread):
     info_signal = pyqtSignal(dict)
@@ -11,19 +18,25 @@ class InfoWorker(QThread):
 
     def run(self):
         ydl_opts = {
-            'quiet': True, 
+            'quiet': True,
             'skip_download': True,
-            'javascript_runtime': './resources/yt_dlp/quickjs.exe' 
+
+            'js_runtimes': {
+                'deno': {
+                    'path': resource_path(os.path.join('src', 'yt_dlp', 'deno.exe'))
+                }
+            },
+            'remote_components': 'ejs:github',
+            'cookiefile': resource_path(os.path.join('src', 'yt_dlp', 'cookies.txt')),
         }
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(self.url, download=False)
                 
-                video_url = info.get('url') 
-                if not video_url:
-                    formats = info.get('formats', [])
-                    best_stream = next((f for f in formats if f.get('vcodec') != 'none' and f.get('acodec') != 'none'), None)
-                    video_url = best_stream['url'] if best_stream else None
+                formats = info.get('formats', [])
+                best_stream = next((f for f in formats if f.get('vcodec') != 'none' and f.get('acodec') != 'none'), None)
+                video_url = best_stream['url'] if best_stream else info.get('url')
 
                 data = {
                     'title': info.get('title', 'No title'),
