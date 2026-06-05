@@ -17,17 +17,24 @@ class InfoWorker(QThread):
         self.url = url
 
     def run(self):
+        bin_dir = resource_path(os.path.join('src', 'yt_dlp'))
+
         ydl_opts = {
             'quiet': True,
+            'no_warnings': True,
             'skip_download': True,
-
+            'ffmpeg_location': bin_dir,
+            
             'js_runtimes': {
                 'deno': {
-                    'path': resource_path(os.path.join('src', 'yt_dlp', 'deno.exe'))
+                    'path': os.path.join(bin_dir, 'deno.exe')
                 }
             },
-            'remote_components': 'ejs:github',
-            'cookiefile': resource_path(os.path.join('src', 'yt_dlp', 'cookies.txt')),
+            'remote_components': ['ejs:github'],
+            'cookiefile': os.path.join(bin_dir, 'cookies.txt'),
+            
+            'nocheckcertificate': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
 
         try:
