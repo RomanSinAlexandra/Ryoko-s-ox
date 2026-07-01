@@ -24,7 +24,6 @@ class DownloadWorker(QThread):
 
     def run(self):
         height_val = self.quality.lower().replace("p", "").strip()
-        
         bin_dir = resource_path(os.path.join('src', 'yt_dlp'))
 
         ydl_opts = {
@@ -34,13 +33,11 @@ class DownloadWorker(QThread):
             'no_warnings': True,
             'noplaylist': True,
             'ffmpeg_location': bin_dir, 
-            
             'js_runtimes': {
                 'deno': {
                     'path': os.path.join(bin_dir, 'deno.exe')
                 }
             },
-            
             'remote_components': ['ejs:github'], 
             'cookiefile': os.path.join(bin_dir, 'cookies.txt'),
             'nocheckcertificate': True,
@@ -49,6 +46,7 @@ class DownloadWorker(QThread):
 
         audio_formats = ['MP3', 'WAV', 'OGG', 'FLAC']
         
+        # СЦЕНАРІЙ 1: Звичайне Аудіо
         if self.fmt in audio_formats:
             ydl_opts['format'] = 'bestaudio/best'
             postprocessor = {
@@ -59,8 +57,14 @@ class DownloadWorker(QThread):
                 postprocessor['preferredquality'] = '192'
             ydl_opts['postprocessors'] = [postprocessor]
             
-        else:
+        # СЦЕНАРІЙ 2: TikTok
+        elif "tiktok" in self.url.lower():
+            ydl_opts['format'] = 'bestvideo+bestaudio/best'
+            ydl_opts['merge_output_format'] = self.fmt.lower()
+            ydl_opts['postprocessors'] = []
 
+        # СЦЕНАРІЙ 3: Універсальна логіка для відео (YouTube та інші)
+        else:
             if height_val == "worst":
                 format_str = "worstvideo+worstaudio/worst"
             elif not height_val.isdigit():
@@ -70,7 +74,6 @@ class DownloadWorker(QThread):
                     format_str = "bestvideo+bestaudio/best"
             else:
                 if self.fmt.lower() == 'mp4':
-
                     format_str = (
                         f"bestvideo[height<={height_val}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
                         f"bestvideo[height<={height_val}][ext=mp4]+bestaudio[ext=m4a]/"
@@ -78,7 +81,6 @@ class DownloadWorker(QThread):
                         f"best"
                     )
                 else:
-                    
                     format_str = (
                         f"bestvideo[height<={height_val}]+bestaudio/"
                         f"bestvideo+bestaudio/"
@@ -87,7 +89,14 @@ class DownloadWorker(QThread):
             
             ydl_opts['format'] = format_str
             ydl_opts['merge_output_format'] = self.fmt.lower()
+            
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': self.fmt.lower(),
+            }]
+            ydl_opts['postprocessor_args'] = ['-c:a', 'aac', '-b:a', '128k']
 
+        # Блок безпосереднього завантаження
         try:
             self.console_signal.emit(f"Starting download: {self.url} as {self.fmt} ({self.quality})")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:

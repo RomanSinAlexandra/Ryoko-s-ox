@@ -24,7 +24,7 @@ def resource_path(relative_path):
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Ryoko Downloader")
+        self.setWindowTitle("Ryoko`s Box")
         self.setWindowIcon(QIcon(resource_path("resource/image/favicon.ico")))
         self.resize(1100, 700)
 
@@ -130,12 +130,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def setup_preview(self, data):
         self.desc_output.setText(f"{data['title']}\n\n{data['description']}")
 
+        # Отображение превью-картинки
         if data.get('thumbnail'):
             try:
-
                 req = urllib.request.Request(data['thumbnail'], headers={'User-Agent': 'Mozilla/5.0'})
-                image_data = urllib.request.urlopen(req).read()
-
                 image_data = urllib.request.urlopen(req).read()
                 self.current_thumbnail_data = image_data
 
@@ -154,11 +152,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.preview_stack.setCurrentWidget(self.thumbnail_label)
         
-        if data['stream_url']:
-            self.media_player.setSource(QUrl(data['stream_url']))
-            self.media_player.pause() 
+        video_url = data.get('stream_url')
+        if video_url:
+            # Обязательно останавливаем плеер перед сменой источника
+            self.media_player.stop()
+
+            # Проверяем, локальный ли это файл (для TikTok) или сетевой (для YouTube)
+            if os.path.exists(video_url):
+                self.media_player.setSource(QUrl.fromLocalFile(video_url))
+                self.log_console(f"Local preview file loaded (TikTok).")
+            else:
+                self.media_player.setSource(QUrl(video_url))
+                self.log_console("Network video stream loaded (YouTube).")
+
+            # Фикс длительности: если yt-dlp вернул секунды, переводим в мс для слайдера
+            if data.get('duration'):
+                try:
+                    duration_ms = int(float(data['duration']) * 1000)
+                    self.update_timeline_duration(duration_ms)
+                except (ValueError, TypeError):
+                    pass
+
             self.btn_play.setIcon(QIcon(resource_path("resource/ico/play.svg")))
-            self.log_console("Video stream loaded. Press Play to start.")
         else:
             self.log_console("Could not resolve video stream URL.")
 
@@ -321,5 +336,3 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
-
-    # C:/Users/Romero/AppData/Local/Programs/Python/Python313/python.exe -m yt_dlp --cookies-from-browser chrome --js-runtimes "deno:E:\work\Ryoko_tsukiko\Ryoko youtube\src\yt_dlp\deno.exe" --remote-components ejs:github --list-formats "https://youtu.be/_QqQGreRAN4"
