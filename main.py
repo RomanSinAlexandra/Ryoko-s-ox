@@ -15,6 +15,7 @@ from src.ui_layout import Ui_MainWindow
 from src.styles.styles import get_main_stylesheet
 from src.workers.download_worker import DownloadWorker
 from src.workers.info_worker import InfoWorker
+from src.AutoUpdaterWorker import AutoUpdaterWorker
 
 def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
@@ -30,6 +31,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.load_settings() 
 
+        self.start_auto_update()
+
         self.media_player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.media_player.setAudioOutput(self.audio_output)
@@ -40,6 +43,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.connect_signals()
 
         self.setStyleSheet(get_main_stylesheet())
+
+    def start_auto_update(self):
+        self.updater_thread = AutoUpdaterWorker()
+        self.updater_thread.status_signal.connect(self.log_update_status)
+        self.updater_thread.start()
+
+    def log_update_status(self, text):
+        print(f"[AutoUpdate] {text}")
+        # Если у вас есть консоль в UI, выводим туда:
+        if hasattr(self, 'console_signal'):
+            self.console_signal.emit(text)
 
     def connect_signals(self):
         self.url_input.textChanged.connect(self.on_url_changed)

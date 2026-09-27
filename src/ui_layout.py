@@ -2,8 +2,8 @@ import os
 import sys
 
 from PyQt6.QtWidgets import (QWidget, QGridLayout, QVBoxLayout, QHBoxLayout,
-                             QLabel, QPushButton, QComboBox, QLineEdit, 
-                             QTextEdit, QFrame, QStackedWidget, QSlider)
+                            QLabel, QPushButton, QComboBox, QLineEdit, 
+                            QTextEdit, QFrame, QStackedWidget, QSlider)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QMovie
 from PyQt6.QtMultimediaWidgets import QVideoWidget
